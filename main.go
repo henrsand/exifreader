@@ -14,11 +14,15 @@ import (
 )
 
 type ImageInfo struct {
-	Path     string    `json:"path"`
-	Filename string    `json:"file_name"`
-	Lat      float64   `json:"lat"`
-	Lng      float64   `json:"lng"`
-	Date     time.Time `json:"date"`
+	Path            string    `json:"path"`
+	Filename        string    `json:"file_name"`
+	Lat             float64   `json:"lat"`
+	Lng             float64   `json:"lng"`
+	Altitude        string    `json:"altitude"`
+	Date            time.Time `json:"date"`
+	Model           string    `json:"model"`
+	PixelXDimension string    `json:"sizeX"`
+	PixelYDimension string    `json:"sizeY"`
 }
 
 type FileCallback[T any] func(string) (data T, err error)
@@ -47,7 +51,7 @@ func TraverseFiles[T any](tree string, extension string, fileCallback FileCallba
 	return data
 }
 
-func ReadCoords(path string) (info ImageInfo, err error) {
+func ReadTags(path string) (info ImageInfo, err error) {
 	f, err := os.Open(path)
 	filename := filepath.Base(path)
 	data := ImageInfo{Path: path, Filename: filename, Lat: 0, Lng: 0}
@@ -60,26 +64,46 @@ func ReadCoords(path string) (info ImageInfo, err error) {
 		return data, err
 	}
 
+	camModel, err := x.Get(exif.Model)
+	if err == nil {
+		data.Model = camModel.String()
+	}
+
+	sizeX, err := x.Get(exif.PixelXDimension)
+	if err == nil {
+		data.PixelXDimension = sizeX.String()
+	}
+
+	sizeY, err := x.Get(exif.PixelYDimension)
+	if err == nil {
+		data.PixelYDimension = sizeY.String()
+	}
+
 	date, err := x.DateTime()
 	if err != nil {
 		return data, err
+	}
+	data.Date = date
+
+	altitude, err := x.Get(exif.GPSAltitude)
+	if err == nil {
+		data.Altitude = altitude.String()
 	}
 
 	lat, lng, err := x.LatLong()
 	if err != nil {
 		return data, err
 	}
-
 	data.Lat = lat
 	data.Lng = lng
-	data.Date = date
+
 	return data, nil
 }
 
 func main() {
 	dir := os.Args[1]
 	start := time.Now()
-	data := TraverseFiles(dir, ".jpg", ReadCoords)
+	data := TraverseFiles(dir, ".jpg", ReadTags)
 	end := time.Now()
 	fmt.Printf("Processed %d files in %f seconds.\n", len(data), end.Sub(start).Seconds())
 	b, err := json.Marshal(data)
